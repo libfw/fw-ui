@@ -23,25 +23,45 @@ event log, connection-tracker state) and edit the ruleset on the fly.
 The daemon never speaks HTTP itself: it exposes a small line-delimited JSON
 request/response protocol on a local UNIX socket (`get_stats`, `get_events`,
 `get_rules`, `set_acl`, `reload`, `reset_stats`). fw-ui is the only process that
-connects to it; it polls the counters to derive rates, tails the event ring, and
-serves a lightweight browser UI (server-sent events for the live stream, plain
-`fetch` POSTs for edits — no WebSocket dependency).
+connects to it; it polls the counters to derive rates and tails the event ring.
+
+The backend is a [Huma](https://huma.rocks) REST API (typed operations, an
+auto-generated OpenAPI spec at `/openapi.json`, and a `/api/stream` server-sent
+event feed) over the standard library router. The frontend is **Svelte +
+DaisyUI** (Tailwind), built to static assets and embedded into the Go binary via
+`go:embed` — so a single `fw-ui` binary serves everything. Live updates ride
+SSE; rule edits are plain `PUT`/`POST` calls (no WebSocket).
+
+## API
+
+| method | path | purpose |
+|--------|------|---------|
+| GET | `/api/snapshot?since=` | latest stats + rate samples + recent events |
+| GET | `/api/stream` | SSE stream of snapshots |
+| GET | `/api/rules` | current ruleset source + format |
+| PUT | `/api/acl` | compile + hot-swap a JSON ruleset |
+| POST | `/api/reload` | re-read the daemon's `--acl` file |
+| POST | `/api/reset` | zero the counters |
 
 ## Layout
 
-- `internal/fwui` — the control-socket client (`Client`) and, soon, the poller
-  and HTTP/SSE server.
-- `cmd/fw-ui` — the `fw-ui` CLI (cobra): point it at a `--control-socket` and a
-  `--listen` address.
+- `internal/fwui` — the control-socket client (`Client`), the poller/aggregator
+  (`Poller`) and the Huma API server (`Server`).
+- `cmd/fw-ui` — the `fw-ui` CLI (cobra) and the embedded frontend (`static/`).
+- `web/` — the Svelte + DaisyUI source; `npm run build` emits into
+  `cmd/fw-ui/static/`.
 
 ## Build & test
 
 ```sh
 go test ./...          # internal/ is held at 100% statement coverage
-go build ./cmd/fw-ui
+(cd web && npm install && npm run build)   # builds the frontend into cmd/fw-ui/static
+CGO_ENABLED=0 go build ./cmd/fw-ui
+./fw-ui --control-socket /var/run/socket_vmnet.control --listen 127.0.0.1:8849
 ```
 
-CGO is not used (`CGO_ENABLED=0`); the result is a single static binary.
+CGO is not used; the result is a single static binary that serves both the API
+and the frontend.
 
 ## License
 
