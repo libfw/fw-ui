@@ -4,6 +4,7 @@
   import Chart from './lib/Chart.svelte'
   import EventsTable from './lib/EventsTable.svelte'
   import RuleEditor from './lib/RuleEditor.svelte'
+  import ThemeSelect from './lib/ThemeSelect.svelte'
 
   onMount(startStream)
 
@@ -48,10 +49,11 @@
       <span class="text-lg font-semibold">fw-ui</span>
       <span class="ml-2 text-sm opacity-60">socket_vmnet firewall</span>
     </div>
-    <div class="flex-none px-2">
+    <div class="flex-none px-2 flex items-center gap-2">
       <span class="badge {connBadge[$connection] || 'badge-ghost'} gap-1">
         {$connection}{#if snap && !snap.connected} · daemon down{/if}
       </span>
+      <ThemeSelect />
     </div>
   </div>
 
