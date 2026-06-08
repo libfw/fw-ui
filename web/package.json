@@ -1,0 +1,18 @@
+{
+  "name": "fw-ui-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^3.1.2",
+    "autoprefixer": "^10.4.20",
+    "daisyui": "^4.12.14",
+    "postcss": "^8.4.49",
+    "svelte": "^4.2.19",
+    "tailwindcss": "^3.4.15",
+    "vite": "^5.4.11"
+  }
+}
