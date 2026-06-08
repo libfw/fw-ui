@@ -1,0 +1,62 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          check-latest: true
+      - run: go version
+      - name: Vet
+        run: go vet ./...
+      - name: Build (CGO-free static binary)
+        run: CGO_ENABLED=0 go build ./...
+      - name: Test + coverage gate
+        shell: bash
+        run: |
+          go test -race -coverprofile=cover.out ./...
+          go tool cover -func=cover.out | tee cover.txt
+          # cmd/fw-ui is a thin cobra/HTTP wrapper with no unit tests; the gate
+          # is on internal/fwui (the client/poller/server logic). Threshold is
+          # 100% (org-wide hard rule): every branch reachable from a test, or
+          # the dead code is removed. The bar is never lowered.
+          go test -coverprofile=cover-pkg.out ./internal/fwui >/dev/null 2>&1
+          pkg_cov=$(go tool cover -func=cover-pkg.out | tail -n 1 | awk '{print $3}' | tr -d '%')
+          echo "internal/fwui coverage: ${pkg_cov}%"
+          awk -v t="$pkg_cov" 'BEGIN { exit !(t+0 >= 100.0) }' || {
+            echo "::error::internal/fwui coverage ${pkg_cov}% < 100%"; exit 1; }
+
+  web:
+    name: frontend build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build the Svelte/DaisyUI frontend
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+      - name: Verify embedded assets were produced
+        run: test -f cmd/fw-ui/static/index.html && ls cmd/fw-ui/static/assets
