@@ -10,18 +10,21 @@ permissions:
   contents: read
 
 jobs:
+  # Native runners: amd64 (also enforces the 100% coverage gate and -race) and
+  # arm64. macOS amd64 keeps the Darwin build honest (fw-ui drives the macOS-only
+  # socket_vmnet control plane).
   test:
     name: test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: stable
           check-latest: true
       - run: go version
       - name: Vet
@@ -42,6 +45,71 @@ jobs:
           echo "internal/fwui coverage: ${pkg_cov}%"
           awk -v t="$pkg_cov" 'BEGIN { exit !(t+0 >= 100.0) }' || {
             echo "::error::internal/fwui coverage ${pkg_cov}% < 100%"; exit 1; }
+
+  # Emulated runners: cross-compile each package's test binary (CGO-free, static)
+  # on the amd64 host, then execute it under QEMU for the four remaining 64-bit
+  # Go targets. s390x is big-endian — a genuine endianness test for the wire
+  # protocol. fw-ui speaks JSON (text) over a unix socket, so there is no byte
+  # order to get wrong, but s390x proves it. No -race / no fuzz under emulation.
+  emulated:
+    name: test (linux/${{ matrix.arch }} qemu)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: riscv64
+            image: debian:trixie
+            qemu_cpu: "rv64,v=true,vlen=128"
+          - arch: loong64
+            image: ghcr.io/loong64/debian:trixie
+            qemu_cpu: la464
+          - arch: ppc64le
+            image: debian:trixie
+            qemu_cpu: power9
+          - arch: s390x
+            image: debian:trixie
+            qemu_cpu: qemu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          check-latest: true
+      - run: go version
+      - name: Register QEMU binfmt handlers
+        run: docker run --privileged --rm tonistiigi/binfmt --install all
+      - name: Cross-compile per-package test binaries
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: "0"
+        shell: bash
+        run: |
+          mkdir -p testbins
+          for pkg in $(go list ./...); do
+            out="testbins/$(echo "$pkg" | tr '/' '_').test"
+            # Skip packages with no test files (go test -c emits nothing).
+            if go test -c -cover -covermode=atomic -o "$out" "$pkg" 2>/dev/null && [ -f "$out" ]; then
+              echo "built $out for $pkg"
+            else
+              echo "no test binary for $pkg (no tests)"
+            fi
+          done
+          ls -l testbins
+      - name: Run test binaries under QEMU (linux/${{ matrix.arch }})
+        shell: bash
+        run: |
+          for bin in testbins/*.test; do
+            [ -f "$bin" ] || continue
+            echo "::group::$bin"
+            docker run --rm --platform "linux/${{ matrix.arch }}" \
+              -e QEMU_CPU="${{ matrix.qemu_cpu }}" \
+              -v "$PWD:/w" -w /w \
+              "${{ matrix.image }}" \
+              "/w/$bin" -test.v
+            echo "::endgroup::"
+          done
 
   web:
     name: frontend build
