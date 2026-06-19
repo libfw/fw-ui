@@ -19,17 +19,17 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout fw-ui
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Checkout socket_vmnet (+ c-fw / c-hcl submodules)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: tannevaled/socket_vmnet
           ref: feature/integrate-libfw
           submodules: recursive
           path: socket_vmnet
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.25"
           check-latest: true
