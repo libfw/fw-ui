@@ -1,3 +1,5 @@
+<p align="center"><img src="https://raw.githubusercontent.com/libfw/brand/main/social/libfw.png" alt="libfw/fw-ui" width="720"></p>
+
 # fw-ui
 
 A real-time web UI for the [libfw](https://github.com/libfw) firewall as exposed
