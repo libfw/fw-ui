@@ -1,3 +1,11 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind v4 is configured from CSS, not from a JS config file. The three
+   `@tailwind` directives are one import, and daisyUI is loaded with `@plugin`
+   rather than listed in tailwind.config.js -- daisyUI 5 is not a PostCSS-era
+   Tailwind plugin any more. The theme list is the one tailwind.config.js
+   carried, in the same order, with `dark` kept as the default. */
+@import "tailwindcss";
+
+@plugin "daisyui" {
+  themes: dark --default, light, night, dracula, synthwave, cyberpunk, business, emerald;
+  logs: false;
+}
